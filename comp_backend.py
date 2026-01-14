@@ -757,12 +757,11 @@ def ninjafile(dest: TextIO = sys.stdout) -> None:
     if len(OBJECTS) > 0:
         has_c = any(obj.language() == 'C' for obj in OBJECTS.values())
         has_cxx = any(obj.language() == 'CXX' for obj in OBJECTS.values())
+        print(f"cl_flags = {CLFLAGS}", file=dest)
         if has_c:
-            print(f"cl_flags = {CLFLAGS}", file=dest)
             print(f"rule cl", file=dest)
             print(BACKEND.compile_c_obj_ninja(), file=dest)
         if has_cxx:
-            print(f"cl_flags = {CLFLAGS}", file=dest)
             print(f"rule cxx", file=dest)
             print(BACKEND.compile_cxx_obj_ninja(), file=dest)
 
