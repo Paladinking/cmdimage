@@ -8,7 +8,7 @@ BUILD_DIR = "build"
 BIN_DIR = "bin"
 
 CLFLAGS_DBG = f"-g -Og"
-LINKFLAGS_DBG = f"-g"
+LINKFLAGS_DBG = f"-g -lOle32 -lOleAut32 -lStrmiids"
 
 BUILD_DIR_DBG = "build-dbg"
 BIN_DIR_DBG = "bin-dbg"

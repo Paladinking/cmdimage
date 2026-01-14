@@ -6,7 +6,7 @@ import sys
 import shutil
 import argparse
 
-from typing import Any, Iterator, List, Optional, TextIO, Type, Union, Tuple, Dict, overload
+from typing import Any, Iterator, List, Literal, Optional, TextIO, Type, Union, Tuple, Dict, overload
 
 BUILD_DIR: pathlib.Path
 BIN_DIR: pathlib.Path
@@ -85,6 +85,9 @@ class Obj:
             else:
                 self.depends.append(dep.product)
 
+    def language(self) -> Literal['C', 'CXX']:
+        return 'C' if self.source.lower().endswith('.c') else 'CXX'
+
     @property
     def product(self) -> str:
         return str(BUILD_DIR / self.name)
@@ -149,6 +152,14 @@ class Exe:
     def product(self) -> str:
         return str(pathlib.PurePath(self.directory) / self.name)
 
+    def languages(self) -> List[Literal['C', 'CXX']]:
+        has_c = any(o.language() == 'C' for o in self.objs)
+        has_cxx = any(o.language() == 'CXX' for o in self.objs)
+        if has_c:
+            return ['C', 'CXX'] if has_cxx else ['C']
+        else:
+            return ['CXX'] if has_cxx else ['C']
+
 class BackendBase:
     builddir: pathlib.Path
     bindir: pathlib.Path
@@ -186,14 +197,24 @@ class EmCC(BackendBase):
     def compile_obj(self, obj: Obj) -> str:
         return f"emcc -c -o {obj.product} {obj.cmp_flags} {obj.source}"
 
-    def compile_obj_ninja(self) -> str:
+    def compile_c_obj_ninja(self) -> str:
         return "    deps = gcc\n    depfile = $out.d\n" + \
                "    command = emcc.bat -MMD -MF $out.d -c $in -o $out $cl_flags"
 
-    def link_exe_ninja(self) -> str:
+    def compile_cxx_obj_ninja(self) -> str:
+        return "    deps = gcc\n    depfile = $out.d\n" + \
+               "    command = em++.bat -MMD -MF $out.d -c $in -o $out $cl_flags"
+
+    def link_c_exe_ninja(self) -> str:
         return "    command = emcc.bat -o $out $in $link_flags"
 
-    def link_dll_ninja(self) -> str:
+    def link_cxx_exe_ninja(self) -> str:
+        return "    command = em++.bat -o $out $in $link_flags"
+
+    def link_c_dll_ninja(self) -> str:
+        raise RuntimeError("Link dll not supported for emcc")
+
+    def link_cxx_dll_ninja(self) -> str:
         raise RuntimeError("Link dll not supported for emcc")
 
     def find_headers(self, obj: Obj) -> List[str]:
@@ -265,15 +286,25 @@ class Gcc(BackendBase):
     def compile_obj(self, obj: Obj) -> str:
         return f"{GCC} -MMD -MF - -c -o {obj.product} {obj.cmp_flags} {obj.source}"
     
-    def compile_obj_ninja(self) -> str:
+    def compile_c_obj_ninja(self) -> str:
         return "    deps = gcc\n    depfile = $out.d\n" + \
                f"    command = {GCC} -MMD -MF $out.d -c $in -o $out $cl_flags"
 
-    def link_exe_ninja(self) -> str:
+    def compile_cxx_obj_ninja(self) -> str:
+        return "    deps = gcc\n    depfile = $out.d\n" + \
+               f"    command = {GPP} -MMD -MF $out.d -c $in -o $out $cl_flags"
+
+    def link_c_exe_ninja(self) -> str:
         return f"    command = {GCC} -o $out $in $link_flags"
 
-    def link_dll_ninja(self) -> str:
+    def link_cxx_exe_ninja(self) -> str:
+        return f"    command = {GPP} -o $out $in $link_flags"
+
+    def link_c_dll_ninja(self) -> str:
         return f"    command = {GCC} -shared -o $out $in $link_flags"
+
+    def link_cxx_dll_ninja(self) -> str:
+        return f"    command = {GPP} -shared -o $out $in $link_flags"
 
     def find_headers(self, obj: Obj) -> List[str]:
         cmd = f"{GCC} -MM {obj.cmp_flags} {obj.source}"
@@ -338,15 +369,24 @@ class Msvc(BackendBase):
     def compile_obj(self, obj: Obj) -> str:
         return f"cl.exe /c /nologo /showIncludes /Fo:{obj.product} {obj.cmp_flags} {obj.source}"
 
-    def compile_obj_ninja(self) -> str:
+    def compile_c_obj_ninja(self) -> str:
         return "    deps = msvc\n" + \
         "    command = cl.exe /nologo /showIncludes /c $in /Fo:$out $cl_flags"
 
-    def link_exe_ninja(self) -> str:
+    def compile_cxx_obj_ninja(self) -> str:
+        return self.compile_c_obj_ninja()
+
+    def link_c_exe_ninja(self) -> str:
         return "    command = link.exe /nologo /OUT:$out $link_flags $in"
 
-    def link_dll_ninja(self) -> str:
+    def link_cxx_exe_ninja(self) -> str:
+        return self.link_c_exe_ninja()
+
+    def link_c_dll_ninja(self) -> str:
         return "    command = link.exe /nologo /OUT:$out /DLL $link_flags $in"
+
+    def link_cxx_dll_ninja(self) -> str:
+        return self.link_cxx_dll_ninja()
 
     def find_headers(self, obj: Obj) -> List[str]:
         cl = shutil.which("cl.exe")
@@ -715,17 +755,31 @@ def ninjafile(dest: TextIO = sys.stdout) -> None:
         print(f"build {group}: phony {deps}\n", file=dest)
 
     if len(OBJECTS) > 0:
-        print(f"cl_flags = {CLFLAGS}", file=dest)
-        print(f"rule cl", file=dest)
-        print(BACKEND.compile_obj_ninja(), file=dest)
+        has_c = any(obj.language() == 'C' for obj in OBJECTS.values())
+        has_cxx = any(obj.language() == 'CXX' for obj in OBJECTS.values())
+        if has_c:
+            print(f"cl_flags = {CLFLAGS}", file=dest)
+            print(f"rule cl", file=dest)
+            print(BACKEND.compile_c_obj_ninja(), file=dest)
+        if has_cxx:
+            print(f"cl_flags = {CLFLAGS}", file=dest)
+            print(f"rule cxx", file=dest)
+            print(BACKEND.compile_cxx_obj_ninja(), file=dest)
 
     if len(EXECUTABLES) > 0:
         print(f"link_flags = {LINKFLAGS}", file=dest)
-        print("rule link_exe", file=dest)
-        print(BACKEND.link_exe_ninja(), file=dest)
-        if any(True for a in EXECUTABLES.values() if a.dll):
-            print("rule link_dll", file=dest)
-            print(BACKEND.link_dll_ninja(), file=dest)
+        if any((not a.dll) and 'CXX' not in a.languages() for a in EXECUTABLES.values()):
+            print("rule link_c_exe", file=dest)
+            print(BACKEND.link_c_exe_ninja(), file=dest)
+        if any((not a.dll) and 'CXX' in a.languages() for a in EXECUTABLES.values()):
+            print("rule link_cxx_exe", file=dest)
+            print(BACKEND.link_cxx_exe_ninja(), file=dest)
+        if any(a.dll and 'CXX' not in a.languages() for a in EXECUTABLES.values()):
+            print("rule link_c_dll", file=dest)
+            print(BACKEND.link_c_dll_ninja(), file=dest)
+        if any(a.dll and 'CXX' in a.languages() for a in EXECUTABLES.values()):
+            print("rule link_cxx_exe", file=dest)
+            print(BACKEND.link_cxx_dll_ninja(), file=dest)
 
     if use_copyto:
         print(f"rule copyto", file=dest)
@@ -734,7 +788,8 @@ def ninjafile(dest: TextIO = sys.stdout) -> None:
 
 
     for key, obj in OBJECTS.items():
-        print(f"build {esc(obj.product)}: cl {esc(obj.source)}", end="", file=dest)
+        rule = 'cl' if obj.language() == 'C' else 'cxx'
+        print(f"build {esc(obj.product)}: {rule} {esc(obj.source)}", end="", file=dest)
         if obj.depends:
             deps = ' '.join((esc(d) for d in obj.depends))
             print(f" || {deps}", file=dest)
@@ -746,10 +801,10 @@ def ninjafile(dest: TextIO = sys.stdout) -> None:
     for key, exe in EXECUTABLES.items():
         row = " ".join([f"{esc(obj.product)}" for obj in exe.objs] + 
                        [f"{esc(cmd.product)}" for cmd in exe.cmds])
-        if exe.dll:
-            print(f"build {esc(exe.product)}: link_dll {row}", file=dest)
-        else:
-            print(f"build {esc(exe.product)}: link_exe {row}", file=dest)
+        cxx = 'CXX' in exe.languages()
+        rule = ('link_cxx_dll' if cxx else 'link_c_dll') if exe.dll else \
+               ('link_cxx_exe' if cxx else 'link_c_exe')
+        print(f"build {esc(exe.product)}: {rule} {row}", file=dest)
         if exe.link_flags != LINKFLAGS:
             print(f"    link_flags = {exe.link_flags.replace('$', '$$')}", file=dest)
     print(file=dest)
@@ -1248,7 +1303,10 @@ def _opencv_hook(path: pathlib.Path, pkg: Dict[str, Any]) -> None:
 
 def _sdl3_hook(path: pathlib.Path, pkg: Dict[str, Any]) -> None:
     if pkg['name'] != 'SDL3':
-        sdl3_path = find_package('SDL3').path / 'lib' / 'cmake' / 'SDL3'
+        if BACKEND.name == 'msvc':
+            sdl3_path = find_package('SDL3').path / 'cmake'
+        else:
+            sdl3_path = find_package('SDL3').path / 'lib' / 'cmake' / 'SDL3'
         depargs: List[str] = [f'-DSDL3_DIR={sdl3_path.absolute()}']
         if pkg['name'] == 'SDL3_ttf':
             freetype_inc = find_package('freetype').path / 'include' / 'freetype2'
@@ -1276,6 +1334,9 @@ def _sdl3_hook(path: pathlib.Path, pkg: Dict[str, Any]) -> None:
 
     if pkg['name'] == 'SDL3_image':
         depargs.append('-DSDLIMAGE_VENDORED=OFF')
+
+    if BACKEND.name == "mingw":
+        depargs.append('-DCMAKE_DISABLE_PRECOMPILE_HEADERS=ON')
 
     res = subprocess.run([*args, *depargs])
     if res.returncode != 0:
@@ -1315,6 +1376,14 @@ KNOWN_PACKAGES = {
             "libpath": ["x64/vc16/lib"],
             "libname": ["opencv_world4130.lib"],
             "dll": ["x64/vc16/bin/opencv_videoio_ffmpeg4130_64.dll", "x64/vc16/bin/opencv_world4130.dll"],
+            "hook": _opencv_hook
+        },
+        "mingw": {
+            "url": "https://github.com/opencv/opencv/archive/refs/tags/4.13.0.zip",
+            "include": ["include"],
+            "libpath": ["x64/mingw/lib"],
+            "libname": ["-lopencv_world4130"],
+            "dll": ["x64/mingw/bin/opencv_videoio_ffmpeg4130_64.dll", "x64/mingw/bin/libopencv_world4130.dll"],
             "hook": _opencv_hook
         }
     },
