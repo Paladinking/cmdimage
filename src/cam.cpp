@@ -8,6 +8,7 @@
 #include <windows.h>
 #include <Dshow.h>
 #include <dvdmedia.h>
+#include <wmcodecdsp.h>
 
 #include "dynamic_string.h"
 
@@ -26,68 +27,236 @@ void DeleteMediaType(AM_MEDIA_TYPE* pmt) {
     }
 }
 
-std::string WideStringToString(const wchar_t* wstr) {
-    if (!wstr) return {};
-
-    // Get the required buffer size
-    int size_needed = WideCharToMultiByte(CP_UTF8, 0, wstr, -1, nullptr, 0,
-                                          nullptr, nullptr);
-
-    if (size_needed <= 0) {
-        return {};
-    }
-
-    std::string str(size_needed, '\0');
-    WideCharToMultiByte(CP_UTF8, 0, wstr, -1, &str[0], size_needed,
-                        nullptr, nullptr);
-
-    // Remove the trailing null
-    if (!str.empty() && str.back() == '\0') {
-        str.pop_back();
-    }
-
-    return str;
-}
-
 #define SAFE_RELEASE(x) { if (x) x->Release(); x = nullptr; }
 
-bool QueryMediaSize(AM_MEDIA_TYPE* pmt, int& w, int& h) {
+bool QueryMediaFormat(AM_MEDIA_TYPE* pmt, int& w, int& h, double& fps) {
     if (pmt->formattype == FORMAT_DvInfo) {
         DVINFO* dvi = (DVINFO*)pmt->pbFormat;
         w = 720;
         h = (dvi->dwDVVAuxSrc & 0x00000080) ? 576 : 480;
+        fps = 30.0;
         return true;
     } else if (pmt->formattype == FORMAT_MPEG2Video) {
         MPEG2VIDEOINFO* mpg2 = (MPEG2VIDEOINFO*)pmt->pbFormat;
         w = mpg2->hdr.bmiHeader.biWidth;
         h = std::abs(mpg2->hdr.bmiHeader.biHeight);
+        fps = 1.0 / ((double)mpg2->hdr.AvgTimePerFrame / 10000000.0);
         return true;
-    } else if (pmt->formattype == FORMAT_MPEGStreams) {
-        return false;
     } else if (pmt->formattype == FORMAT_MPEGVideo) {
         MPEG1VIDEOINFO* mpg1 = (MPEG1VIDEOINFO*)pmt->pbFormat;
         w = mpg1->hdr.bmiHeader.biWidth;
         h = std::abs(mpg1->hdr.bmiHeader.biHeight);
+        fps = 1.0 / ((double)mpg1->hdr.AvgTimePerFrame / 10000000.0);
         return true;
-    } else if (pmt->formattype == FORMAT_WaveFormatEx) {
-        return false;
     } else if (pmt->formattype == FORMAT_VideoInfo) {
         VIDEOINFOHEADER* vih = (VIDEOINFOHEADER*)pmt->pbFormat;
         w = vih->bmiHeader.biWidth;
         h = std::abs(vih->bmiHeader.biHeight);
+        fps = 1.0 / ((double)vih->AvgTimePerFrame / 10000000.0);
         return true;
     } else if (pmt->formattype == FORMAT_VideoInfo2) {
         VIDEOINFOHEADER2* vih = (VIDEOINFOHEADER2*)pmt->pbFormat;
         w = vih->bmiHeader.biWidth;
         h = std::abs(vih->bmiHeader.biHeight);
+        fps = 1.0 / ((double)vih->AvgTimePerFrame / 10000000.0);
         return true;
     } else {
         return false;
     }
 }
 
+void PrintMediaType(AM_MEDIA_TYPE* pmt) {
+    int w, h;
+    double fps = 0.0;
+    if (!QueryMediaFormat(pmt, w, h, fps)) {
+        w = -1;
+        h = -1;
+    }
+    if (pmt->majortype != MEDIATYPE_Video) {
+        printf("Unkown MediaType\n");
+        return;
+    }
+    printf("Video ");
+    if (pmt->subtype == MEDIASUBTYPE_AI44) {
+        printf("AI44");
+    } else if (pmt->subtype == MEDIASUBTYPE_IA44) {
+        printf("IA44");
+    } else if (pmt->subtype == MEDIASUBTYPE_dvsl) {
+        printf("dvsl");
+    } else if (pmt->subtype == MEDIASUBTYPE_dvsd) {
+        printf("dvsd");
+    } else if (pmt->subtype == MEDIASUBTYPE_dvhd) {
+        printf("dvhd");
+    } else if (pmt->subtype == MEDIASUBTYPE_dv25) {
+        printf("dv25");
+    } else if (pmt->subtype == MEDIASUBTYPE_dv50) {
+        printf("dv50");
+    } else if (pmt->subtype == MEDIASUBTYPE_dvh1) {
+        printf("dvh1");
+    } else if (pmt->subtype == MEDIASUBTYPE_DVCS) {
+        printf("DVCS");
+    } else if (pmt->subtype == MEDIASUBTYPE_DVSD) {
+        printf("DVSD");
+    } else if (pmt->subtype == MEDIASUBTYPE_AVC1) {
+        printf("AVC1");
+    } else if (pmt->subtype == MEDIASUBTYPE_H264) {
+        printf("H264");
+    } else if (pmt->subtype == MEDIASUBTYPE_h264) {
+        printf("h264");
+    } else if (pmt->subtype == MEDIASUBTYPE_X264) {
+        printf("X264");
+    } else if (pmt->subtype == MEDIASUBTYPE_x264) {
+        printf("x264");
+    } else if (pmt->subtype == MEDIASUBTYPE_RGB1) {
+        printf("RGB1");
+    } else if (pmt->subtype == MEDIASUBTYPE_RGB4) {
+        printf("RGB4");
+    } else if (pmt->subtype == MEDIASUBTYPE_RGB8) {
+        printf("RGB8");
+    } else if (pmt->subtype == MEDIASUBTYPE_RGB555) {
+        printf("RGB555");
+    } else if (pmt->subtype == MEDIASUBTYPE_RGB565) {
+        printf("RGB565");
+    } else if (pmt->subtype == MEDIASUBTYPE_RGB24) {
+        printf("RGB24");
+    } else if (pmt->subtype == MEDIASUBTYPE_RGB32) {
+        printf("RGB32");
+    } else if (pmt->subtype == MEDIASUBTYPE_ARGB1555) {
+        printf("ARGB1555");
+    } else if (pmt->subtype == MEDIASUBTYPE_ARGB32) {
+        printf("ARGB32");
+    } else if (pmt->subtype == MEDIASUBTYPE_ARGB4444) {
+        printf("ARGB4444");
+    } else if (pmt->subtype == MEDIASUBTYPE_A2R10G10B10) {
+        printf("A2R10G10B10");
+    } else if (pmt->subtype == MEDIASUBTYPE_A2B10G10R10) {
+        printf("A2B10G10R10");
+    } else if (pmt->subtype == MEDIASUBTYPE_RGB32_D3D_DX7_RT) {
+        printf("RGB32_D3D_DX7_RT");
+    } else if (pmt->subtype == MEDIASUBTYPE_RGB16_D3D_DX7_RT) {
+        printf("RGB16_D3D_DX7_RT");
+    } else if (pmt->subtype == MEDIASUBTYPE_ARGB32_D3D_DX7_RT) {
+        printf("ARGB32_D3D_DX7_RT");
+    } else if (pmt->subtype == MEDIASUBTYPE_ARGB4444_D3D_DX7_RT) {
+        printf("ARGB4444_D3D_DX7_RT");
+    } else if (pmt->subtype == MEDIASUBTYPE_ARGB1555_D3D_DX7_RT) {
+        printf("ARGB1555_D3D_DX7_RT");
+    } else if (pmt->subtype == MEDIASUBTYPE_RGB32_D3D_DX9_RT) {
+        printf("RGB32_D3D_DX9_RT");
+    } else if (pmt->subtype == MEDIASUBTYPE_RGB16_D3D_DX9_RT) {
+        printf("RGB16_D3D_DX9_RT");
+    } else if (pmt->subtype == MEDIASUBTYPE_ARGB32_D3D_DX9_RT) {
+        printf("ARGB32_D3D_DX9_RT");
+    } else if (pmt->subtype == MEDIASUBTYPE_ARGB4444_D3D_DX9_RT) {
+        printf("ARGB4444_D3D_DX9_RT");
+    } else if (pmt->subtype == MEDIASUBTYPE_ARGB1555_D3D_DX9_RT) {
+        printf("ARGB1555_D3D_DX9_RT");
+    } else if (pmt->subtype == MEDIASUBTYPE_AYUV) {
+        printf("AYUV");
+    } else if (pmt->subtype == MEDIASUBTYPE_YUY2) {
+        printf("YUY2");
+    } else if (pmt->subtype == MEDIASUBTYPE_IMC1) {
+        printf("IMC1");
+    } else if (pmt->subtype == MEDIASUBTYPE_IMC3) {
+        printf("IMC3");
+    } else if (pmt->subtype == MEDIASUBTYPE_IMC2) {
+        printf("IMC2");
+    } else if (pmt->subtype == MEDIASUBTYPE_IMC4) {
+        printf("IMC4");
+    } else if (pmt->subtype == MEDIASUBTYPE_YV12) {
+        printf("YV12");
+    } else if (pmt->subtype == MEDIASUBTYPE_NV12) {
+        printf("NV12");
+    } else if (pmt->subtype == MEDIASUBTYPE_I420) {
+        printf("I420");
+    } else if (pmt->subtype == MEDIASUBTYPE_IF09) {
+        printf("IF09");
+    } else if (pmt->subtype == MEDIASUBTYPE_IYUV) {
+        printf("IYUV");
+    } else if (pmt->subtype == MEDIASUBTYPE_Y211) {
+        printf("Y211");
+    } else if (pmt->subtype == MEDIASUBTYPE_Y411) {
+        printf("Y411");
+    } else if (pmt->subtype == MEDIASUBTYPE_Y41P) {
+        printf("Y41P");
+    } else if (pmt->subtype == MEDIASUBTYPE_YVU9) {
+        printf("YVU9");
+    } else if (pmt->subtype == MEDIASUBTYPE_YVYU) {
+        printf("YVYU");
+    } else if (pmt->subtype == MEDIASUBTYPE_CFCC) {
+        printf("CFCC");
+    } else if (pmt->subtype == MEDIASUBTYPE_CLJR) {
+        printf("CLJR");
+    } else if (pmt->subtype == MEDIASUBTYPE_CPLA) {
+        printf("CPLA");
+    } else if (pmt->subtype == MEDIASUBTYPE_CLPL) {
+        printf("CLPL");
+    } else if (pmt->subtype == MEDIASUBTYPE_IJPG) {
+        printf("IJPG");
+    } else if (pmt->subtype == MEDIASUBTYPE_MDVF) {
+        printf("MDVF");
+    } else if (pmt->subtype == MEDIASUBTYPE_MJPG) {
+        printf("MJPG");
+    } else if (pmt->subtype == MEDIASUBTYPE_Overlay) {
+        printf("Overlay");
+    } else if (pmt->subtype == MEDIASUBTYPE_Plum) {
+        printf("Plum");
+    } else if (pmt->subtype == MEDIASUBTYPE_QTJpeg) {
+        printf("QTJpeg");
+    } else if (pmt->subtype == MEDIASUBTYPE_QTMovie) {
+        printf("QTMovie");
+    } else if (pmt->subtype == MEDIASUBTYPE_QTRle) {
+        printf("QTRle");
+    } else if (pmt->subtype == MEDIASUBTYPE_QTRpza) {
+        printf("QTRpza");
+    } else if (pmt->subtype == MEDIASUBTYPE_QTSmc) {
+        printf("QTSmc");
+    } else if (pmt->subtype == MEDIASUBTYPE_TVMJ) {
+        printf("TVMJ");
+    } else if (pmt->subtype == MEDIASUBTYPE_VPVBI) {
+        printf("VPVBI");
+    } else if (pmt->subtype == MEDIASUBTYPE_VPVideo) {
+        printf("VPVideo");
+    } else if (pmt->subtype == MEDIASUBTYPE_WAKE) {
+        printf("WAKE");
+    } else {
+        printf("Unkown");
+    }
+
+    if (pmt->formattype == FORMAT_DvInfo) {
+        printf(" DvInfo");
+    } else if (pmt->formattype == FORMAT_MPEG2Video) {
+        printf(" MPEG2Video");
+    } else if (pmt->formattype == FORMAT_MPEGStreams) {
+        printf(" MPEGStreams");
+    } else if (pmt->formattype == FORMAT_MPEGVideo) {
+        printf(" MPEGVideo");
+    } else if (pmt->formattype == FORMAT_None) {
+        printf(" None");
+    } else if (pmt->formattype == FORMAT_VideoInfo) {
+        printf(" VideoInfo");
+    } else if (pmt->formattype == FORMAT_VideoInfo2) {
+        printf(" VideoInfo2");
+    } else if (pmt->formattype == FORMAT_WaveFormatEx) {
+        printf(" WaveFormatEx");
+    } else {
+        printf(" Uknown");
+    }
+
+    printf(" [%.2f fps, %d, %d", fps, w, h);
+    if (pmt->bFixedSizeSamples) {
+        printf(", Fixed Size Samples");
+    }
+    if (pmt->bTemporalCompression) {
+        printf(", Temporal Compression");
+    }
+    printf("]\n");
+}
+
+
 struct CaptureDevice {
     RefString name;
+    RefString type;
     int w;
     int h;
 };
@@ -115,21 +284,38 @@ bool QueryCaptureDevice(IMoniker* pMoniker, CaptureDevice& dev) {
                 if (FAILED(hr)) {
                     continue;
                 }
-                AM_MEDIA_TYPE* pmt = nullptr;
-                hr = pConfig->GetFormat(&pmt);
+                
+                int count, size;
+                hr = pConfig->GetNumberOfCapabilities(&count, &size);
                 if (FAILED(hr)) {
-                    pConfig->Release();
                     continue;
                 }
-                if (!QueryMediaSize(pmt, dev.w, dev.h)) {
-                    DeleteMediaType(pmt);
+                BYTE* b = (BYTE*)Mem_alloc(size);
+                if (b == nullptr) {
                     pConfig->Release();
-                    continue;
+                    break;
                 }
+                AM_MEDIA_TYPE* pmt = nullptr;
 
-                DeleteMediaType(pmt);
+                for (int i = 0; i < count; ++i) {
+                    hr = pConfig->GetStreamCaps(i, &pmt, b);
+                    if (FAILED(hr)) {
+                        break;
+                    }
+                    int w, h;
+                    double fps;
+                    if (QueryMediaFormat(pmt, w, h, fps)) {
+                        PrintMediaType(pmt);
+                        if (!status) {
+                            dev.w = w;
+                            dev.h = h;
+                        }
+                        status = true;
+                    }
+                    DeleteMediaType(pmt);
+                }
+                Mem_free(b);
                 pConfig->Release();
-                status = true;
                 break;
             }
         }
@@ -195,6 +381,7 @@ std::vector<CaptureDevice> FindCaptureDevices() {
                         throw new std::bad_alloc();
                     }
 
+                    printf("Device: %s\n", dev.name->buffer);
                     if (QueryCaptureDevice(pMoniker, dev)) {
                         res.push_back(dev);
                     }
@@ -328,7 +515,7 @@ int main() {
     for (auto dev: devices) {
         ++ix;
         printf("Name: %s, w: %d, h: %d\n", dev.name->buffer, dev.w, dev.h);
-        if (dev.name == "OBS Virtual Camera") {
+        if (dev.name != "OBS Virtual Camera") {
             w = dev.w;
             h = dev.h;
             break;
@@ -339,7 +526,6 @@ int main() {
         CoUninitialize();
         return 1;
     }
-
 
     ch = ch * 2; // Two pixels per row
 

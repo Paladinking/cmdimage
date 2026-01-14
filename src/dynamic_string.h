@@ -155,6 +155,9 @@ bool WString_format_append(WString* dest, const wchar_t* fmt, ...);
 #endif
 
 #ifdef __cplusplus
+
+#include <new>
+
 class RefString {
 private:
     String str;

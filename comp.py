@@ -2,7 +2,7 @@ from comp_backend import *
 import pathlib
 
 CLFLAGS="/GS- /GL /O1 /favor:AMD64 /nologo /EHsc"
-LINKFLAGS="/LTCG Strmiids.lib Ole32.Lib OleAut32.Lib"
+LINKFLAGS="/LTCG Strmiids.lib Ole32.Lib OleAut32.Lib wmcodecdspuuid.lib"
 
 BUILD_DIR = "build"
 BIN_DIR = "bin"
