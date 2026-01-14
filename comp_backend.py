@@ -1222,6 +1222,30 @@ def _freetype_emsdk_hook(path: pathlib.Path, pkh: Dict[str, Any]) -> None:
         raise RuntimeError(f"Failed building {path}")
     shutil.rmtree(src_path)
 
+def _opencv_hook(path: pathlib.Path, pkg: Dict[str, Any]) -> None:
+    src_path = path.with_name(path.name + "-src")
+    build_dir = src_path / 'build'
+
+    if src_path.exists():
+        shutil.rmtree(src_path)
+
+    shutil.move(path, src_path)
+    cmake, args = find_cmake(src_path / 'opencv-4.13.0', build_dir, path)
+    depargs = ['-DBUILD_PERF_TESTS:BOOL=OFF', '-DBUILD_TESTS:BOOL=OFF',
+               '-DBUILD_DOCS:BOOL=OFF', '-DWITH_CUDA:BOOL=OFF', '-DBUILD_EXAMPLES:BOOL=OFF',
+               '-DINSTALL_CREATE_DISTRIB=ON']
+
+    res = subprocess.run([*args, *depargs])
+    if res.returncode != 0:
+        raise RuntimeError(f"Failed building {path}")
+    res = subprocess.run([cmake, '--build', str(build_dir)])
+    if res.returncode != 0:
+        raise RuntimeError(f"Failed building {path}")
+    res = subprocess.run([cmake, '--install', str(build_dir)])
+    if res.returncode != 0:
+        raise RuntimeError(f"Failed building {path}")
+    shutil.rmtree(src_path)
+
 def _sdl3_hook(path: pathlib.Path, pkg: Dict[str, Any]) -> None:
     if pkg['name'] != 'SDL3':
         sdl3_path = find_package('SDL3').path / 'lib' / 'cmake' / 'SDL3'
@@ -1282,6 +1306,16 @@ KNOWN_PACKAGES = {
             "libname": ["-lbox2d"],
             "dll": [],
             "hook": _box2d_hook
+        }
+    },
+    "OpenCV": {
+        "msvc": {
+            "url": "https://github.com/opencv/opencv/archive/refs/tags/4.13.0.zip",
+            "include": ["include"],
+            "libpath": ["x64/vc16/lib"],
+            "libname": ["opencv_world4130.lib"],
+            "dll": ["x64/vc16/bin/opencv_videoio_ffmpeg4130_64.dll", "x64/vc16/bin/opencv_world4130.dll"],
+            "hook": _opencv_hook
         }
     },
     "freetype": {

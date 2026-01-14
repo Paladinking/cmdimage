@@ -1,8 +1,8 @@
 from comp_backend import *
 import pathlib
 
-CLFLAGS="/GS- /GL /O1 /favor:AMD64 /nologo"
-LINKFLAGS="/LTCG"
+CLFLAGS="/GS- /GL /O1 /favor:AMD64 /nologo /EHsc"
+LINKFLAGS="/LTCG Strmiids.lib Ole32.Lib OleAut32.Lib"
 
 BUILD_DIR = "build"
 BIN_DIR = "bin"
@@ -29,14 +29,21 @@ def main():
     sdl3 = find_package("SDL3")
     sdl3_image = find_package("SDL3_image")
 
+    opencv = find_package("OpenCV")
+
     if backend().name == "gcc":
         link = "-Wl,-rpath,'$ORIGIN'"
     else:
         link = None
 
-    Executable("main", "src/main.c", "src/dynamic_string.c", 
+    dynamic_string = Object("dynamic_string.obj", "src/dynamic_string.c")
+
+    Executable("main", "src/main.c", dynamic_string, 
                packages=[sdl3, sdl3_image], extra_link_flags=link)
-    CopyToBin(*sdl3.dlls, *sdl3_image.dlls)
+    Executable("cam", "src/cam.cpp", dynamic_string,
+               packages=[opencv])
+
+    CopyToBin(*sdl3.dlls, *sdl3_image.dlls, *opencv.dlls)
 
     build(__file__)
 

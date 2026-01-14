@@ -4,6 +4,10 @@
 #include "mem.h"
 #include <stdint.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 typedef uint32_t string_size_t;
 
 typedef struct String {
@@ -58,7 +62,7 @@ bool String_equals_str(const String* s, const char* str);
 void String_free(String* s);
 
 // Copy `source` into `dest`. `dest` should be unitialized
-bool String_copy(String_noinit* dest, String* source);
+bool String_copy(String_noinit* dest, const String* source);
 
 // Increase capacity to allow `count` elements
 bool String_reserve(String* s, size_t count);
@@ -126,7 +130,7 @@ bool WString_equals_str(const WString* s, const wchar_t* str);
 void WString_free(WString* s);
 
 // Copy `source` into `dest`. `dest` should be unitialized
-bool WString_copy(WString_noinit* dest, WString* source);
+bool WString_copy(WString_noinit* dest, const WString* source);
 
 // Increase capacity to allow `count` elements
 bool WString_reserve(WString* s, size_t count);
@@ -144,6 +148,165 @@ bool WString_from_utf8_str(WString* dest, const char* s);
 bool WString_format(WString* dest, const wchar_t* fmt, ...);
 
 bool WString_format_append(WString* dest, const wchar_t* fmt, ...);
+#endif
+
+#ifdef __cplusplus
+}
+#endif
+
+#ifdef __cplusplus
+class RefString {
+private:
+    String str;
+public:
+    operator String*() noexcept {
+        return &str;
+    }
+    operator const String*() const noexcept {
+        return &str;
+    }
+    String& operator*() noexcept {
+        return str;
+    }
+    const String& operator*() const noexcept {
+        return str;
+    }
+    String* operator->() noexcept {
+        return &str;
+    }
+    const String* operator->() const noexcept {
+        return &str;
+    }
+    bool operator==(const RefString& other) const noexcept {
+        return String_equals(*this, other);
+    }
+    bool operator==(const char* str) const noexcept {
+        return String_equals_str(*this, str);
+    }
+    bool operator!=(const RefString& other) const noexcept {
+        return !String_equals(*this, other);
+    }
+    bool operator!=(const char* str) const noexcept {
+        return !String_equals_str(*this, str);
+    }
+
+    RefString() : str{nullptr, 0, 0} {
+        if (!String_create(&str)) {
+            throw new std::bad_alloc();
+        }
+    }
+    RefString(const RefString& other) : str{nullptr, 0, 0} {
+        if (!String_copy(&str, &other.str)) {
+            throw new std::bad_alloc();
+        }
+    }
+    RefString(RefString&& other) noexcept : str{other.str} {
+        other.str.buffer = nullptr;
+        other.str.capacity = 0;
+        other.str.length = 0;
+    }
+    RefString& operator=(const RefString& other) {
+        if (this != &other) {
+            if (str.buffer != nullptr) {
+                String_free(&str);
+                str = {nullptr, 0, 0};
+            }
+            if (!String_copy(&str, &other.str)) {
+                throw new std::bad_alloc();
+            }
+        }
+        return *this;
+    }
+    RefString& operator=(RefString&& other) {
+        if (this != &other) {
+            if (str.buffer != nullptr) {
+                String_free(&str);
+            }
+            str = other.str;
+            other.str = {nullptr, 0, 0};
+        }
+        return *this;
+    }
+    ~RefString() {
+        if (str.buffer != nullptr) {
+            String_free(&str);
+        }
+    }
+};
+
+
+class RefWString {
+private:
+    WString str;
+public:
+    operator WString*() noexcept {
+        return &str;
+    }
+    operator const WString*() const noexcept {
+        return &str;
+    }
+    WString& operator*() noexcept {
+        return str;
+    }
+    const WString& operator*() const noexcept {
+        return str;
+    }
+    WString* operator->() noexcept {
+        return &str;
+    }
+    const WString* operator->() const noexcept {
+        return &str;
+    }
+    bool operator==(const RefWString& other) const noexcept {
+        return WString_equals(*this, other);
+    }
+    bool operator==(const wchar_t* str) const noexcept {
+        return WString_equals_str(*this, str);
+    }
+
+    RefWString() : str{nullptr, 0, 0} {
+        if (!WString_create(&str)) {
+            throw new std::bad_alloc();
+        }
+    }
+    RefWString(const RefWString& other) : str{nullptr, 0, 0} {
+        if (!WString_copy(&str, &other.str)) {
+            throw new std::bad_alloc();
+        }
+    }
+    RefWString(RefWString&& other) noexcept : str{other.str} {
+        other.str.buffer = nullptr;
+        other.str.capacity = 0;
+        other.str.length = 0;
+    }
+    RefWString& operator=(const RefWString& other) {
+        if (this != &other) {
+            if (str.buffer != nullptr) {
+                WString_free(&str);
+                str = {nullptr, 0, 0};
+            }
+            if (!WString_copy(&str, &other.str)) {
+                throw new std::bad_alloc();
+            }
+        }
+        return *this;
+    }
+    RefWString& operator=(RefWString&& other) {
+        if (this != &other) {
+            if (str.buffer != nullptr) {
+                WString_free(&str);
+            }
+            str = other.str;
+            other.str = {nullptr, 0, 0};
+        }
+        return *this;
+    }
+    ~RefWString() {
+        if (str.buffer != nullptr) {
+            WString_free(&str);
+        }
+    }
+};
 #endif
 
 #endif

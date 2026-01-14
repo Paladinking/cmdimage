@@ -160,7 +160,7 @@ void String_free(String *s) {
     s->buffer = NULL;
 }
 
-bool String_copy(String* dest, String* source) {
+bool String_copy(String* dest, const String* source) {
     dest->length = source->length;
     dest->capacity = 4;
     while (dest->capacity <= source->length) {
@@ -467,7 +467,7 @@ void WString_free(WString *s) {
     s->buffer = NULL;
 }
 
-bool WString_copy(WString* dest, WString* source) {
+bool WString_copy(WString* dest, const WString* source) {
     dest->length = source->length;
     dest->capacity = 4;
     while (dest->capacity <= source->length) {
